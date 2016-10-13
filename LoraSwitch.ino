@@ -4,7 +4,7 @@
 #define SerialDebug Serial
 #define SerialLORA Serial1
 
-const unsigned long ULDelayLoop = 130600; // ERC7003 868 MHz 1% duty cycle   SF12 5bytes
+const unsigned long ULDelayLoop = 180000; // ERC7003 868 MHz 1% duty cycle   SF12 5bytes
 const unsigned long xbeeSerialDelay = 500;
 
 const int LED_PCB_PIN = 9;         //Connect the PCB LED L0 to Pin13, Digital 13
@@ -47,9 +47,10 @@ void loop() {
   byte powerValue = digitizePowerValue(powerStatus);
   visualCheckWithLed(LED_PCB_PIN, powerValue == 0);
   /***************send light ***************/
-  if (millis()  >= elapsedTimeSinceLastSending + ULDelayLoop) {
+  unsigned long millisecondsElapsed = millis();
+  if (millisecondsElapsed  >= elapsedTimeSinceLastSending + ULDelayLoop) {
     sendPowerLineSensorValuetoNanoN8(powerStatus);
-    elapsedTimeSinceLastSending = millis();
+    elapsedTimeSinceLastSending = millisecondsElapsed;
   }
   delay(1000);
 
@@ -237,9 +238,8 @@ void sendPowerLineSensorValuetoNanoN8(int l_value)
 {
   SerialDebug.print("--> Send frame:  ");
   byte powerValue = digitizePowerValue(l_value);
-  writeBigEndian(powerValue, &SerialLORA);
-  writeBigEndian(powerValue, &SerialDebug);
-  
+  SerialLORA.write(powerValue);
+  SerialDebug.print(powerValue, HEX);
 }
 
 void visualCheckWithLed(int led, boolean predicate) {
@@ -252,11 +252,6 @@ void visualCheckWithLed(int led, boolean predicate) {
 
 byte digitizePowerValue(int powerValue) {
   return powerValue > 512 ? 1 : 0;
-}
-
-void writeBigEndian(byte bytesToWrite, HardwareSerial *port) {
-  port->print(bytesToWrite, HEX); //send in reverse endian
-  port->print(" ");
 }
 
 
