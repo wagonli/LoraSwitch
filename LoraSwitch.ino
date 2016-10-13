@@ -92,6 +92,11 @@ void initXbeeNanoN8() {
   SerialDebug.println("\n- Enter command mode: +++");
   delay(xbeeSerialDelay);
 
+  SerialLORA.print("ATM17=3\n");          // Enter command mode
+  str_dummy = SerialLORA.readString();
+  SerialDebug.println("\n- Enter command mode: +++");
+  delay(xbeeSerialDelay);
+
   SerialLORA.print("ATV\n");    // Return module version, DevEUI (LSB first), Stack version.
   str_dummy = SerialLORA.readString();
   SerialDebug.print("\n ATIM Module version & information:");
