@@ -2,253 +2,217 @@
 #define MODE_OTAA
 
 #define SerialDebug Serial
-#define SerialLORA Serial1
+#define SerialLoRa Serial1
 
 const unsigned long ULDelayLoop = 180000; // ERC7003 868 MHz 1% duty cycle   SF12 5bytes
-const unsigned long xbeeSerialDelay = 500;
+const unsigned long ULAirTimeDelay = 2100; // class A max air time is 2.1sec
+const unsigned long LoRaSerialDelay = 500;
 
-const int LED_PCB_PIN = 9;         //Connect the PCB LED L0 to Pin13, Digital 13
-const int LED_EXT_PIN = 8;         //Connect the external Green LED to Pin 12, Digital 12
+const int LED_PCB_PIN = 9;
+const int LED_EXT_PIN = 8;
 
 const int PIN_POWERLINE = 0;
 
 unsigned long elapsedTimeSinceLastSending = -ULDelayLoop;
 
 void setup() {
-  SerialDebug.println("**************** LoraSwitch ***********************.\n ");
+  SerialDebug.println("**************** LoraSwitch ***********************");
 
-  // *********** init Debug and Bee baud rate ***********************************
+  // *********** init Debug and LoRa baud rate ***********************************
   SerialDebug.begin(19200);      // the debug baud rate on Hardware Serial Atmega
-  SerialLORA.begin(19200);       // the Bee baud rate on Software Serial Atmega
+  SerialLoRa.begin(19200);       // the LoRa baud rate on Software Serial Atmega
 
   // *********** init digital pins **********************************************
-  pinMode(LED_PCB_PIN, OUTPUT);     //Set the LED on Digital 12 as an OUTPUT
+  pinMode(LED_PCB_PIN, OUTPUT);
   digitalWrite(LED_PCB_PIN, LOW);  //init
-  pinMode(LED_EXT_PIN, OUTPUT);     //Set the External Led on Digital 13 as an OUTPUT
+  pinMode(LED_EXT_PIN, OUTPUT);
   digitalWrite(LED_EXT_PIN, LOW);  //init
 
-  SerialDebug.println("- Check LED Blinking on Stalker...\n");
-  led_blinking(2);  // blinking for ten seconds
+  SerialDebug.println("LoRa Switch Init...\n");
+  ledBlinking(3);
 
   // set ATO & ATM Parameters for Nano N8
-  initXbeeNanoN8();
-
-  SerialDebug.println("\n*************** Sensor Light Value & Led Activity on Stalker: ************\n");
+  initLoRaModule();
 
   delay(1000);
-
+  SerialDebug.println("Init Completed...");
 }
 
 void loop() {
-  /****************Up Link data ****************************************/
+  String result;
 
+  /**************** Up Link Data ****************************************/
   /****** Power status measurement **************************************/
-  int powerStatus = analogRead(PIN_POWERLINE); //read light from sensor
-  byte powerValue = digitizePowerValue(powerStatus);
-  visualCheckWithLed(LED_PCB_PIN, powerValue == 0);
-  /***************send light ***************/
+  byte power = digitizePowerValue(analogRead(PIN_POWERLINE));
+  updateLedStatus(LED_PCB_PIN, power == 0);
+
+  /*************** Send Message ? ***************/
   unsigned long millisecondsElapsed = millis();
   if (millisecondsElapsed  >= elapsedTimeSinceLastSending + ULDelayLoop) {
-    sendPowerLineSensorValuetoNanoN8(powerStatus);
+    sendPowerLineValuetoLoRa(power);
+
+    /********* Down Link Get Serial Data *****************************/
+    unsigned long millisecondsDownLink = millis(); // Current millis()
+    while (!SerialLoRa.available())
+      if ((millis() - millisecondsDownLink) > ULAirTimeDelay) break;
+
+    if (SerialLoRa.available()) {
+      // Read the Down Link serial Data:
+      result = SerialLoRa.readString();
+      SerialDebug.print("Command received : ");
+      SerialDebug.println(result);
+      while (SerialLoRa.read() > -1); // Empty Buffer
+    }
     elapsedTimeSinceLastSending = millisecondsElapsed;
   }
-  delay(1000);
 
-  /********* Down Link get serial data  *****************************/
-  /*unsigned long l_milli = millis(); //save current time for timeout
-  while (!SerialLORA.available()) //wait for valid data
-    if ((millis() - l_milli) > 2100) break; //timeout at 2.1s (class A max air time is 2.1sec)*/
+  SerialDebug.print("RSSI Reader");
+  sendATCommandToLoRa("ATT09\n", result);
 
-  /*if(SerialLORA.available()) {
-    // read the down link serial Data:
-    by_CdeLed = SerialLORA.read();
-
-    SerialDebug.print("<-- Cde Led received = ");
-    SerialDebug.println(by_CdeLed);
-
-    while(SerialLORA.read() > -1); //empty XBee buffer
-
-    switch (by_CdeLed) {
-       case 0:
-        digitalWrite(LED_PCB_PIN, LOW);
-        break;
-       case 1:
-        digitalWrite(LED_PCB_PIN, HIGH);
-        break;
-       case 2:
-        led_blinking(30);  // both leds blink for 30 sec
-        break;
-    }
-    }*/
+  delay(10000);
 }
 
-void initXbeeNanoN8() {
-  String str_dummy;
+void initLoRaModule() {
+  String result;
 
   // ************ Command Mode *****************
   // set ATO & ATM Parameters (Unconf frame, port com, encoding, rx payload only, Duty Cycle...)
-  SerialLORA.print("+++");          // Enter command mode
-  str_dummy = SerialLORA.readString();
-  SerialDebug.println("\n- Enter command mode: +++");
-  delay(xbeeSerialDelay);
+  SerialDebug.print("Enter command mode: +++");
+  sendATCommandToLoRa("+++", result);
 
-  SerialLORA.print("ATM17=3\n");          // Enter command mode
-  str_dummy = SerialLORA.readString();
-  SerialDebug.println("\n- Enter command mode: +++");
-  delay(xbeeSerialDelay);
+  SerialDebug.print("LoRa Serial rate 19200 ATM007=06");
+  sendATCommandToLoRa("ATM007=06\n", result);
 
-  SerialLORA.print("ATV\n");    // Return module version, DevEUI (LSB first), Stack version.
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print("\n ATIM Module version & information:");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
+  SerialDebug.print("Debug Mode");
+  sendATCommandToLoRa("ATM17=3\n", result);
 
-  /***************** DevEUI ****************************************/
-  SerialLORA.print("ATO070\n");    // DevEUI (4 Bytes all at once)
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print(" get DevEUI (LSB F) ATO070: ");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
+  SerialDebug.print("Battery Level");
+  sendATCommandToLoRa("ATT08\n", result);
 
-  /***************** AppEUI ****************************************/
-  SerialLORA.print("ATO071\n");    // AppEUI (4 Bytes all at once)
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print(" get AppEUI (LSB F) ATO071: ");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
+  SerialDebug.print("RSSI Reader");
+  sendATCommandToLoRa("ATT09\n", result);
 
-  /***************** Serial Rx ****************************************/
-  SerialLORA.print("ATM007=06\n");    // Baud rate 19200
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print(" --> Xbee Serial rate 19200 ATM007=06: ");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
+  SerialDebug.print("ATIM Module version & information");
+  sendATCommandToLoRa("ATV\n", result);
 
-  // /***************** JoinMode ****************************************/
-  SerialLORA.print("ATO083\n"); //get actual join mode
-  str_dummy = SerialLORA.readString();
-  delay(xbeeSerialDelay);
+  SerialDebug.print("Get DevAddr (LSB F) ATO069");
+  sendATCommandToLoRa("ATO069\n", result);
+
+  SerialDebug.print("Get DevEUI (LSB F) ATO070");
+  sendATCommandToLoRa("ATO070\n", result);
+
+  SerialDebug.print("Get AppEUI (LSB F) ATO071");
+  sendATCommandToLoRa("ATO071\n", result);
+
+  SerialDebug.print("Get AppKey (LSB F) ATO072");
+  sendATCommandToLoRa("ATO072\n", result);
+
+  SerialDebug.print("Get NwkSKey (LSB F) ATO073");
+  sendATCommandToLoRa("ATO073\n", result);
+
+  SerialDebug.print("Get AppSKey (LSB F) ATO074");
+  sendATCommandToLoRa("ATO074\n", result);
+
+  SerialDebug.print("NETWORK_JOINED");
+  sendATCommandToLoRa("ATO201\n", result);
+
+  /***************** JoinMode ****************************************/
+  SerialDebug.print("LoRaWan Behaviouir ATO083");
+  sendATCommandToLoRa("ATO083\n", result);
 
 #ifdef MODE_OTAA
-
-  SerialDebug.print(" --> OTAA ");
-  SerialDebug.println(str_dummy);
+  SerialDebug.println(" --> OTAA ");
 
   /***************** OTAA ****************************************/
-  if (str_dummy[7] != '3' || str_dummy[8] != 'F') { //avoid to restart if already in the right mode
-    SerialLORA.print("ATO083=3F\n");    // OTAA
-    str_dummy = SerialLORA.readString();
-    SerialDebug.println(" set to OTAA mode: ");
-    SerialDebug.println(str_dummy);
-    delay(xbeeSerialDelay);
+  if (result[7] != '3' || result[8] != 'F') { // Avoid Restarting if Already in Right Mode
+    SerialDebug.print("Set to OTAA mode");
+    sendATCommandToLoRa("ATO083=3F\n", result);
 
-    SerialDebug.println(" Save new configuration");
-    SerialLORA.print("ATOS");    // save param to EEPROM
-    while (SerialLORA.read() > -1); //empty buffer
-    delay(xbeeSerialDelay);
+    SerialDebug.println("Save new configuration");
+    sendATCommandToLoRa("ATOS", result);
+    while (SerialLoRa.read() > -1); // Empty buffer
 
-    SerialDebug.println(" Restart the module");
-    SerialLORA.print("ATR\n");    // restart the module
-    delay(1500);
+    SerialDebug.print("Restart the module");
+    sendATCommandToLoRa("ATR\n", result);
+    delay(3 * LoRaSerialDelay);
   }
-
-  /***************** AppKey ****************************************/
-  SerialLORA.print("ATO072\n");    // AppKey (16 Bytes all at once)
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print(" get AppKey (LSB F) ATO072: ");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
-
 #else
-  SerialDebug.print(" --> ABP ");
-  SerialDebug.println(str_dummy);
+  SerialDebug.println(" --> ABP ");
 
   /***************** ABP ****************************************/
-  if (str_dummy[7] != '3' || str_dummy[8] != 'E') { //avoid to restart if already in the right mode
-    SerialLORA.print("ATO083=3E\n");    // ABP
-    str_dummy = SerialLORA.readString();
-    SerialDebug.println(" set to OTAA mode: ");
-    SerialDebug.println(str_dummy);
-    delay(xbeeSerialDelay);
+  if (result[7] != '3' || result[8] != 'E') { // Avoid Restarting if Already in Right Mode
+    SerialDebug.print("Set to ABP mode");
+    sendATCommandToLoRa("ATO083=3E\n", result);
 
-    SerialDebug.println(" Save new configuration");
-    SerialLORA.print("ATOS");    // save param to EEPROM
-    while (SerialLORA.read() > -1); //empty buffer
-    delay(xbeeSerialDelay);
+    SerialDebug.println("Save new configuration");
+    sendATCommandToLoRa("ATOS", result);
+    while (SerialLoRa.read() > -1); // Empty buffer
 
-    SerialDebug.println(" Restart the module");
-    SerialLORA.print("ATR\n");    // restart the module
-    delay(1500);
+    SerialDebug.print("Restart the module");
+    sendATCommandToLoRa("ATR\n", result);
+    delay(3 * LoRaSerialDelay);
   }
-
-  /***************** DevAddr ****************************************/
-  SerialLORA.print("ATO069\n");    // AppSKey (16 Bytes all at once)
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print(" get DevAddr (LSB F) ATO069: ");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
-
-  /***************** AppSKey ****************************************/
-  SerialLORA.print("ATO074\n");    // AppSKey (16 Bytes all at once)
-  str_dummy = SerialLORA.readString();
-  SerialDebug.print(" get AppSKey (LSB F) ATO074: ");
-  SerialDebug.println(str_dummy);
-  delay(xbeeSerialDelay);
-
 #endif
 
-
   //  /***************** ATF ****************************************/
-  //  SerialLORA.print("ATOS\n");    // ATO configuration saving
-  //  str_dummy = SerialLORA.readString();
+  //  SerialLoRa.print("ATOS\n");
+  //  dummy = SerialLoRa.readString();
   //  SerialDebug.print(" return to factory config ");
-  //  SerialDebug.println(str_dummy);
+  //  SerialDebug.println(dummy);
   //  delay(500);
   //
   //  /***************** reboot ****************************************/
-  //  SerialLORA.print("ATR\n");    // ATR ro reboot module
-  //  str_dummy = SerialLORA.readString();
+  //  SerialLoRa.print("ATR\n");
+  //  dummy = SerialLoRa.readString();
   //  SerialDebug.print(" reboot module ");
-  //  SerialDebug.println(str_dummy);
+  //  SerialDebug.println(dummy);
   //  delay(500);
 
   /***********************Quit COMMAND MODE ********************/
-  SerialLORA.print("ATQ\n");        // Quit command mode
-  str_dummy = SerialLORA.readString();
-  SerialDebug.println("\n- Quit command mode: ATQ");
-  delay(500);
+  //  SerialDebug.println("Quit command mode: ATQ");
+  //  sendATCommandToLoRa("ATQ\n", result);
 }
 
-void led_blinking(int sec)
+void sendATCommandToLoRa(String command, String &result)
+{
+  SerialLoRa.print(command);
+  result = SerialLoRa.readString();
+  SerialDebug.println(result);
+  delay(LoRaSerialDelay);
+}
+
+void ledBlinking(int seconds)
 {
   SerialDebug.print(" --> led blinking... ");
-  SerialDebug.print(sec);
-  SerialDebug.print("sec ");
+  SerialDebug.print(seconds);
+  SerialDebug.print(" sec");
 
-  int i_cmp = 0;
-  while (i_cmp++ < sec)
+  int counter = 0;
+  while (counter++ < seconds)
   {
     // blink
     digitalWrite(LED_PCB_PIN, HIGH);
-    delay(450); // wait for a second
+    delay(350);
 
     digitalWrite(LED_PCB_PIN, LOW);
-    delay(450); // wait for a second
+    delay(450);
   }
 
-  SerialDebug.println("...end blinking");
+  SerialDebug.println("... end blinking");
 }
 
-void sendPowerLineSensorValuetoNanoN8(int l_value)
+void sendPowerLineValuetoLoRa(byte value)
 {
-  SerialDebug.print("--> Send frame:  ");
-  byte powerValue = digitizePowerValue(l_value);
-  SerialLORA.write(powerValue);
-  SerialDebug.print(powerValue, HEX);
+  String result;
+  String string = String(value, HEX);
+
+  SerialDebug.print("--> Send frame: ");
+  SerialDebug.println(value, HEX);
+  sendATCommandToLoRa("AT$SB=" + string + "\n", result);
 }
 
-void visualCheckWithLed(int led, boolean predicate) {
-  if(predicate) {
+void updateLedStatus(int led, boolean predicate) {
+  if (predicate) {
     digitalWrite(led, HIGH);
   } else {
     digitalWrite(led, LOW);
