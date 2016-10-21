@@ -1,3 +1,5 @@
+#include <SeeedOLED.h>
+#include <Wire.h>
 #include <math.h>
 #define MODE_OTAA
 
@@ -10,12 +12,18 @@ const unsigned long LoRaSerialDelay = 500;
 
 const int LED_PCB_PIN = 9;
 const int LED_EXT_PIN = 8;
+const int RELAY_EXT_PIN = 4;
 
 const int PIN_POWERLINE = 0;
 
 unsigned long elapsedTimeSinceLastSending = -ULDelayLoop;
 
 void setup() {
+  Wire.begin();
+
+  initLCD();
+  displayOnLCD(0, 0, "Init LoRa Module");
+
   SerialDebug.println("**************** LoraSwitch ***********************");
 
   // *********** init Debug and LoRa baud rate ***********************************
@@ -27,6 +35,8 @@ void setup() {
   digitalWrite(LED_PCB_PIN, LOW);  //init
   pinMode(LED_EXT_PIN, OUTPUT);
   digitalWrite(LED_EXT_PIN, LOW);  //init
+  pinMode(RELAY_EXT_PIN, OUTPUT);
+  digitalWrite(RELAY_EXT_PIN, LOW);  //init
 
   SerialDebug.println("LoRa Switch Init...\n");
   ledBlinking(3);
@@ -40,6 +50,9 @@ void setup() {
 
 void loop() {
   String result;
+  displayOnLCD(0, 0, "LoRa Module     ");
+  displayOnLCD(1, 0, "Monitoring      ");
+
 
   /**************** Up Link Data ****************************************/
   /****** Power status measurement **************************************/
@@ -68,8 +81,40 @@ void loop() {
 
   SerialDebug.print("RSSI Reader");
   sendATCommandToLoRa("ATT09\n", result);
+  displayOnLCD(3, 0, "RSSI Reader:");
+  displayOnLCD(4, 0, result + " ");
+
+  SerialDebug.print("NETWORK_JOINED");
+  sendATCommandToLoRa("ATO201\n", result);
+  displayOnLCD(5, 0, "Network Joined:");
+  displayOnLCD(6, 0, result + " ");
+
+  SerialDebug.print("Battery Level");
+  sendATCommandToLoRa("ATT08\n", result);
+  displayOnLCD(7, 0, result + " ");
 
   delay(10000);
+}
+
+void changeRelayState(bool state)
+{
+  digitalWrite(RELAY_EXT_PIN, state);
+}
+
+void initLCD() {
+  SeeedOled.init();  //initialze SEEED OLED display
+
+  SeeedOled.clearDisplay();          //clear the screen and set start position to top left corner
+  SeeedOled.setNormalDisplay();      //Set display to normal mode (i.e non-inverse mode)
+  SeeedOled.setPageMode();           //Set addressing mode to Page Mode
+}
+
+
+void displayOnLCD(int X, int Y, String string) {
+  char buf[256];
+  string.toCharArray(buf, sizeof(buf));
+  SeeedOled.setTextXY(X, Y);
+  SeeedOled.putString(buf);
 }
 
 void initLoRaModule() {
