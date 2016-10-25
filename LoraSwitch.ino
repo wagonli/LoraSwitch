@@ -6,23 +6,30 @@
 #define SerialDebug Serial
 #define SerialLoRa Serial1
 
+#define ADC_AREF 3.3
+#define BATVOLTPIN A6
+#define BATVOLT_R1 4.7
+#define BATVOLT_R2 10
+
 const unsigned long ULDelayLoop = 180000; // ERC7003 868 MHz 1% duty cycle   SF12 5bytes
 const unsigned long ULAirTimeDelay = 2100; // class A max air time is 2.1sec
-const unsigned long LoRaSerialDelay = 500;
+const unsigned long LoRaSerialDelay = 250;
+const unsigned long LCDDelay = 250;
 
 const int LED_PCB_PIN = 9;
-const int LED_EXT_PIN = 8;
+const int PIN_POWERLINE = A4;
 const int RELAY_EXT_PIN = 4;
-
-const int PIN_POWERLINE = 0;
+const int LCD_LINE_NR = 16;
+const int LCD_DISPLAY_MOD = 10;
 
 unsigned long elapsedTimeSinceLastSending = -ULDelayLoop;
+String lastLink;
 
 void setup() {
   Wire.begin();
 
   initLCD();
-  displayOnLCD(0, 0, "Init LoRa Module");
+  displayOnLCDX(4, "Please Wait...");
 
   SerialDebug.println("**************** LoraSwitch ***********************");
 
@@ -33,36 +40,38 @@ void setup() {
   // *********** init digital pins **********************************************
   pinMode(LED_PCB_PIN, OUTPUT);
   digitalWrite(LED_PCB_PIN, LOW);  //init
-  pinMode(LED_EXT_PIN, OUTPUT);
-  digitalWrite(LED_EXT_PIN, LOW);  //init
   pinMode(RELAY_EXT_PIN, OUTPUT);
-  digitalWrite(RELAY_EXT_PIN, LOW);  //init
+  digitalWrite(RELAY_EXT_PIN, HIGH);  //init
 
   SerialDebug.println("LoRa Switch Init...\n");
-  ledBlinking(3);
+  blinkLed(3);
 
   // set ATO & ATM Parameters for Nano N8
   initLoRaModule();
 
   delay(1000);
   SerialDebug.println("Init Completed...");
+  displayOnLCDX(4, " ");
+  digitalWrite(RELAY_EXT_PIN, LOW);  //init
+
+
+  readPowerInput();
 }
 
 void loop() {
+  static int lcdLoop = 0;
   String result;
-  displayOnLCD(0, 0, "LoRa Module     ");
-  displayOnLCD(1, 0, "Monitoring      ");
-
-
-  /**************** Up Link Data ****************************************/
   /****** Power status measurement **************************************/
-  byte power = digitizePowerValue(analogRead(PIN_POWERLINE));
+  byte power = digitizePowerValue(readPowerInput());
   updateLedStatus(LED_PCB_PIN, power == 0);
 
+  /**************** Up Link Data ****************************************/
   /*************** Send Message ? ***************/
   unsigned long millisecondsElapsed = millis();
   if (millisecondsElapsed  >= elapsedTimeSinceLastSending + ULDelayLoop) {
-    sendPowerLineValuetoLoRa(power);
+
+    SerialDebug.println("*** TIME TO SEND DATA... ***");
+    sendPowerLineValuetoLoRa(power, result);
 
     /********* Down Link Get Serial Data *****************************/
     unsigned long millisecondsDownLink = millis(); // Current millis()
@@ -71,50 +80,135 @@ void loop() {
 
     if (SerialLoRa.available()) {
       // Read the Down Link serial Data:
-      result = SerialLoRa.readString();
-      SerialDebug.print("Command received : ");
-      SerialDebug.println(result);
-      while (SerialLoRa.read() > -1); // Empty Buffer
+      lastLink = SerialLoRa.readString(); lastLink.trim();
+      SerialDebug.print("Last Link: ");
+      SerialDebug.println(lastLink);
+      if (lastLink.length() > 2)
+      {
+        if (lastLink[0] == 0) {
+          SerialDebug.println("Turn Relay OFF");
+          digitalWrite(RELAY_EXT_PIN, LOW);
+        }
+        else
+        {
+          SerialDebug.println("Turn Relay ON");
+          digitalWrite(RELAY_EXT_PIN, HIGH);
+        }
+      }
     }
     elapsedTimeSinceLastSending = millisecondsElapsed;
   }
 
-  SerialDebug.print("RSSI Reader");
-  sendATCommandToLoRa("ATT09\n", result);
-  displayOnLCD(3, 0, "RSSI Reader:");
-  displayOnLCD(4, 0, result + " ");
+  if (lcdLoop % LCD_DISPLAY_MOD == 0)
+  {
+    lcdLoop = 0;
+    displayOnLCDX(0, "LoRa Monitor");
 
-  SerialDebug.print("NETWORK_JOINED");
-  sendATCommandToLoRa("ATO201\n", result);
-  displayOnLCD(5, 0, "Network Joined:");
-  displayOnLCD(6, 0, result + " ");
+    SerialDebug.print("RSSI Reader");
+    sendATCommandToLoRa("ATT09\n", result);
+    result.trim();
+    displayOnLCDX(2, "RSSI");
+    if (result.length() == 7)
+    {
+      displayOnLCDXY(2, 5, result);
+    }
+    else
+    {
+      SerialDebug.println("*" + result + "*");
+      displayOnLCDXY(2, 5, "-");
+    }
 
-  SerialDebug.print("Battery Level");
-  sendATCommandToLoRa("ATT08\n", result);
-  displayOnLCD(7, 0, result + " ");
+    SerialDebug.print("NETWORK_JOINED");
+    sendATCommandToLoRa("ATO201\n", result);
+    result.trim();
+    if (result.indexOf("01") >= 0)
+    {
+      displayOnLCDX(3, "NET_JOINED OK");
+    }
+    else
+    {
+      displayOnLCDX(3, "NET_JOINED KO");
+    }
 
-  delay(10000);
+    SerialDebug.print("Battery Level");
+    sendATCommandToLoRa("ATT08\n", result);
+
+    int battery = getRealBatteryVoltage() * 1000.0;
+    SerialDebug.println(battery);
+    displayOnLCDX(4, "BAT " + String(battery) + "mv");
+
+    String status = ((power == 0) ? "OFF" : "ON");
+    displayOnLCDX(5, "POW " + status);
+    SerialDebug.print("POW ");
+    SerialDebug.println(status);
+
+    SerialDebug.print("LAST LINK ");
+    SerialDebug.println(lastLink);
+    if (lastLink.indexOf("OK") >= 0)
+    {
+      SerialDebug.println("=> UP OK");
+      displayOnLCDXY(5, 8, "UP OK");
+    }
+    else
+    {
+      SerialDebug.println("=> UP KO");
+      displayOnLCDXY(5, 8, "UP KO");
+    }
+
+    if (lastLink.length() > 2)
+    {
+      if (lastLink[0] == 0) {
+        SerialDebug.println("=> DOWN OFF");
+        displayOnLCDX(6, "LAST DOWN OFF");
+      }
+      else
+      {
+        SerialDebug.println("=> DOWN ON");
+        displayOnLCDX(6, "LAST DOWN ON");
+      }
+    }
+    else
+    {
+      SerialDebug.println("=> NO DOWN DATA");
+      displayOnLCDX(6, "NO DOWN DATA");
+    }
+  }
+
+  unsigned long wait = (elapsedTimeSinceLastSending - millisecondsElapsed + ULDelayLoop) / 1000;
+  if (wait <= ULDelayLoop)
+  {
+    SerialDebug.println("Link in " + String(wait) + "s");
+    displayOnLCDXY(7, 0, "Link in " + String(wait) + "s   ");
+  }
+
+  lcdLoop++;
+  delay(1000);
 }
 
-void changeRelayState(bool state)
-{
+void changeRelayState(bool state) {
   digitalWrite(RELAY_EXT_PIN, state);
 }
 
 void initLCD() {
-  SeeedOled.init();  //initialze SEEED OLED display
-
-  SeeedOled.clearDisplay();          //clear the screen and set start position to top left corner
-  SeeedOled.setNormalDisplay();      //Set display to normal mode (i.e non-inverse mode)
-  SeeedOled.setPageMode();           //Set addressing mode to Page Mode
+  SeeedOled.init();
+  SeeedOled.clearDisplay();
+  SeeedOled.setNormalDisplay();
+  SeeedOled.setPageMode();
 }
 
-
-void displayOnLCD(int X, int Y, String string) {
-  char buf[256];
-  string.toCharArray(buf, sizeof(buf));
+void displayOnLCDXY(int X, int Y, String string) {
+  char lineBuffer[LCD_LINE_NR + 1];
+  string.toCharArray(lineBuffer, sizeof(lineBuffer));
   SeeedOled.setTextXY(X, Y);
-  SeeedOled.putString(buf);
+  SeeedOled.putString(lineBuffer);
+}
+
+void displayOnLCDX(int X, String string) {
+  char lineBuffer[LCD_LINE_NR + 1];
+  memset(lineBuffer, ' ', sizeof(lineBuffer)); lineBuffer[LCD_LINE_NR] = 0;
+  displayOnLCDXY(X, 0, String(lineBuffer));
+  delay(LCDDelay);
+  displayOnLCDXY(X, 0, string);
 }
 
 void initLoRaModule() {
@@ -128,8 +222,8 @@ void initLoRaModule() {
   SerialDebug.print("LoRa Serial rate 19200 ATM007=06");
   sendATCommandToLoRa("ATM007=06\n", result);
 
-  SerialDebug.print("Debug Mode");
-  sendATCommandToLoRa("ATM17=3\n", result);
+  SerialDebug.print("Debug Mode ON or OFF");
+  sendATCommandToLoRa("ATM17=1\n", result); // 1: DEBUG MODE ON, 3: DEBUG MODE OFF
 
   SerialDebug.print("Battery Level");
   sendATCommandToLoRa("ATT08\n", result);
@@ -162,7 +256,7 @@ void initLoRaModule() {
   sendATCommandToLoRa("ATO201\n", result);
 
   /***************** JoinMode ****************************************/
-  SerialDebug.print("LoRaWan Behaviouir ATO083");
+  SerialDebug.print("LoRaWan Behaviour ATO083");
   sendATCommandToLoRa("ATO083\n", result);
 
 #ifdef MODE_OTAA
@@ -175,7 +269,6 @@ void initLoRaModule() {
 
     SerialDebug.println("Save new configuration");
     sendATCommandToLoRa("ATOS", result);
-    while (SerialLoRa.read() > -1); // Empty buffer
 
     SerialDebug.print("Restart the module");
     sendATCommandToLoRa("ATR\n", result);
@@ -191,7 +284,6 @@ void initLoRaModule() {
 
     SerialDebug.println("Save new configuration");
     sendATCommandToLoRa("ATOS", result);
-    while (SerialLoRa.read() > -1); // Empty buffer
 
     SerialDebug.print("Restart the module");
     sendATCommandToLoRa("ATR\n", result);
@@ -218,17 +310,15 @@ void initLoRaModule() {
   //  sendATCommandToLoRa("ATQ\n", result);
 }
 
-void sendATCommandToLoRa(String command, String &result)
-{
+void sendATCommandToLoRa(String command, String &result) {
+  delay(LoRaSerialDelay);
   SerialLoRa.print(command);
   result = SerialLoRa.readString();
   SerialDebug.println(result);
-  delay(LoRaSerialDelay);
 }
 
-void ledBlinking(int seconds)
-{
-  SerialDebug.print(" --> led blinking... ");
+void blinkLed(int seconds) {
+  SerialDebug.print("Led blinking... ");
   SerialDebug.print(seconds);
   SerialDebug.print(" sec");
 
@@ -246,12 +336,10 @@ void ledBlinking(int seconds)
   SerialDebug.println("... end blinking");
 }
 
-void sendPowerLineValuetoLoRa(byte value)
-{
-  String result;
+void sendPowerLineValuetoLoRa(byte value, String &result) {
   String string = String(value, HEX);
 
-  SerialDebug.print("--> Send frame: ");
+  SerialDebug.print("Send Data: ");
   SerialDebug.println(value, HEX);
   sendATCommandToLoRa("AT$SB=" + string + "\n", result);
 }
@@ -265,8 +353,22 @@ void updateLedStatus(int led, boolean predicate) {
 }
 
 byte digitizePowerValue(int powerValue) {
+  SerialDebug.print("Power Value: ");
+  SerialDebug.println(powerValue);
   return powerValue > 512 ? 1 : 0;
 }
 
+int readPowerInput() {
+  int sum = 0, i;
+  for (i = 0; i < 3; i++)
+  {
+    sum += analogRead(PIN_POWERLINE);
+  }
+  return sum / i;
+}
 
-
+float getRealBatteryVoltage()
+{
+  uint16_t batteryVoltage = analogRead(BATVOLTPIN);
+  return (ADC_AREF / 1023.0) * (BATVOLT_R1 + BATVOLT_R2) / BATVOLT_R2 * batteryVoltage;
+}
