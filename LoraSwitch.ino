@@ -24,6 +24,7 @@ const int LCD_DISPLAY_MOD = 10;
 
 unsigned long elapsedTimeSinceLastSending = -ULDelayLoop;
 String lastLink;
+int battery;
 
 void setup() {
   Wire.begin();
@@ -53,9 +54,6 @@ void setup() {
   SerialDebug.println("Init Completed...");
   displayOnLCDX(4, " ");
   digitalWrite(RELAY_EXT_PIN, LOW);  //init
-
-
-  readPowerInput();
 }
 
 void loop() {
@@ -72,6 +70,7 @@ void loop() {
 
     SerialDebug.println("*** TIME TO SEND DATA... ***");
     sendPowerLineValuetoLoRa(power, result);
+    //sendDatatoLoRa(String(power) + String(battery), result);
 
     /********* Down Link Get Serial Data *****************************/
     unsigned long millisecondsDownLink = millis(); // Current millis()
@@ -94,6 +93,10 @@ void loop() {
           SerialDebug.println("Turn Relay ON");
           digitalWrite(RELAY_EXT_PIN, HIGH);
         }
+      }
+      else
+      {
+        SerialDebug.println("No command received...");
       }
     }
     elapsedTimeSinceLastSending = millisecondsElapsed;
@@ -130,10 +133,10 @@ void loop() {
       displayOnLCDX(3, "NET_JOINED KO");
     }
 
-    SerialDebug.print("Battery Level");
-    sendATCommandToLoRa("ATT08\n", result);
+    /*    SerialDebug.print("Battery Level");
+        sendATCommandToLoRa("ATT08\n", result);*/
 
-    int battery = getRealBatteryVoltage() * 1000.0;
+    battery = getRealBatteryVoltage() * 1000.0;
     SerialDebug.println(battery);
     displayOnLCDX(4, "BAT " + String(battery) + "mv");
 
@@ -255,6 +258,9 @@ void initLoRaModule() {
   SerialDebug.print("NETWORK_JOINED");
   sendATCommandToLoRa("ATO201\n", result);
 
+  SerialDebug.print("Frame Size ATO084");
+  sendATCommandToLoRa("ATO084=0\n", result);
+
   /***************** JoinMode ****************************************/
   SerialDebug.print("LoRaWan Behaviour ATO083");
   sendATCommandToLoRa("ATO083\n", result);
@@ -344,6 +350,17 @@ void sendPowerLineValuetoLoRa(byte value, String &result) {
   sendATCommandToLoRa("AT$SB=" + string + "\n", result);
 }
 
+void sendDatatoLoRa(String data, String &result) {
+  String hexStr = "";
+  for (int i = 0; i < data.length(); i++) {
+    hexStr += String(data.charAt(i), HEX);
+  }
+
+  SerialDebug.print("Send Data: ");
+  SerialDebug.println(hexStr);
+  sendATCommandToLoRa("AT$SF=" + hexStr + "\n", result);
+}
+
 void updateLedStatus(int led, boolean predicate) {
   if (predicate) {
     digitalWrite(led, HIGH);
@@ -360,6 +377,10 @@ byte digitizePowerValue(int powerValue) {
 
 int readPowerInput() {
   int sum = 0, i;
+  battery = getRealBatteryVoltage() * 1000.0; // Measure battery here!
+  SerialDebug.print("Battery: ");
+  SerialDebug.println(battery);
+
   for (i = 0; i < 3; i++)
   {
     sum += analogRead(PIN_POWERLINE);
