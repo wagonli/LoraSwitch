@@ -21,22 +21,22 @@ const int PIN_POWERLINE = A4;
 const int RELAY_EXT_PIN = 4;
 const int LCD_LINE_NR = 16;
 const int LCD_DISPLAY_MOD = 10;
+const int DOWNLINK_LOOP = 3;
 
 unsigned long elapsedTimeSinceLastSending = -ULDelayLoop;
 String lastLink;
 int battery;
 
 void setup() {
-  Wire.begin();
+  // *********** init Debug and LoRa baud rate ***********************************
+  SerialDebug.begin(19200);      // the debug baud rate on Hardware Serial Atmega
+  SerialLoRa.begin(19200);       // the LoRa baud rate on Software Serial Atmega
 
+  Wire.begin();
   initLCD();
   displayOnLCDX(4, "Please Wait...");
 
   SerialDebug.println("**************** LoraSwitch ***********************");
-
-  // *********** init Debug and LoRa baud rate ***********************************
-  SerialDebug.begin(19200);      // the debug baud rate on Hardware Serial Atmega
-  SerialLoRa.begin(19200);       // the LoRa baud rate on Software Serial Atmega
 
   // *********** init digital pins **********************************************
   pinMode(LED_PCB_PIN, OUTPUT);
@@ -73,31 +73,22 @@ void loop() {
     //sendDatatoLoRa(String(power) + String(battery), result);
 
     /********* Down Link Get Serial Data *****************************/
-    unsigned long millisecondsDownLink = millis(); // Current millis()
-    while (!SerialLoRa.available())
-      if ((millis() - millisecondsDownLink) > ULAirTimeDelay) break;
-
-    if (SerialLoRa.available()) {
-      // Read the Down Link serial Data:
-      lastLink = SerialLoRa.readString(); lastLink.trim();
-      SerialDebug.print("Last Link: ");
-      SerialDebug.println(lastLink);
-      if (lastLink.length() > 2)
-      {
-        if (lastLink[0] == 0) {
-          SerialDebug.println("Turn Relay OFF");
-          digitalWrite(RELAY_EXT_PIN, LOW);
-        }
-        else
-        {
-          SerialDebug.println("Turn Relay ON");
-          digitalWrite(RELAY_EXT_PIN, HIGH);
-        }
+    waitForCommand();
+    if (lastLink.length() > 2)
+    {
+      if (lastLink[0] == 0) {
+        SerialDebug.println("Turn Relay OFF");
+        digitalWrite(RELAY_EXT_PIN, LOW);
       }
       else
       {
-        SerialDebug.println("No command received...");
+        SerialDebug.println("Turn Relay ON");
+        digitalWrite(RELAY_EXT_PIN, HIGH);
       }
+    }
+    else
+    {
+      SerialDebug.println("No command received...");
     }
     elapsedTimeSinceLastSending = millisecondsElapsed;
   }
@@ -137,7 +128,6 @@ void loop() {
         sendATCommandToLoRa("ATT08\n", result);*/
 
     battery = getRealBatteryVoltage() * 1000.0;
-    SerialDebug.println(battery);
     displayOnLCDX(4, "BAT " + String(battery) + "mv");
 
     String status = ((power == 0) ? "OFF" : "ON");
@@ -186,6 +176,31 @@ void loop() {
 
   lcdLoop++;
   delay(1000);
+}
+
+void waitForCommand()
+{
+  lastLink = "";
+  for (int i = 1; i <= DOWNLINK_LOOP; i++)
+  {
+    SerialDebug.println("Waiting for LoRa Data... Loop " + String(i) + "/" + DOWNLINK_LOOP);
+    unsigned long millisecondsDownLink = millis(); // Current millis()
+    while (!SerialLoRa.available())
+      if ((millis() - millisecondsDownLink) > ULAirTimeDelay) break;
+
+    if (SerialLoRa.available()) {
+      SerialDebug.println("Reading Data");
+
+      // Read the Down Link serial Data:
+      lastLink += SerialLoRa.readString();
+    }
+    else
+    {
+      SerialDebug.println("No Data");
+    }
+  }
+  SerialDebug.print("Last Link: ");
+  displayStringInHexChar(lastLink);
 }
 
 void changeRelayState(bool state) {
@@ -393,3 +408,17 @@ float getRealBatteryVoltage()
   uint16_t batteryVoltage = analogRead(BATVOLTPIN);
   return (ADC_AREF / 1023.0) * (BATVOLT_R1 + BATVOLT_R2) / BATVOLT_R2 * batteryVoltage;
 }
+
+void displayStringInHexChar(String data)
+{
+  SerialDebug.print(data + " ");
+  int len = data.length() + 1;
+  char *buf = malloc(len);
+  data.toCharArray(buf, len);
+  for (int i = 0; i < len; i++)
+  {
+    SerialDebug.print("0x"); SerialDebug.print(buf[i], HEX); SerialDebug.print("/"); SerialDebug.print(buf[i]); SerialDebug.print(" ");
+  }
+  SerialDebug.println("");
+}
+
