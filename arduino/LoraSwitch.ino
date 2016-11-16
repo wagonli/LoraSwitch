@@ -24,6 +24,21 @@ const int LCD_DISPLAY_MOD = 10;
 
 unsigned long elapsedTimeSinceLastSending = -ULDelayLoop;
 
+void changeRelayState(bool state);
+void initLCD();
+void displayOnLCDXY(int X, int Y, String string);
+void displayOnLCDX(int X, String string);
+void initLoRaModule();
+void sendATCommandToLoRa(String upData, bool extraDelay, String &downData);
+void blinkLed(int seconds);
+void sendPowerLineValuetoLoRa(byte value, String &result);
+void sendDatatoLoRa(String data, String &result);
+void updateLedStatus(int led, boolean predicate);
+byte digitizePowerValue(int powerValue);
+int readPowerInput();
+float getRealBatteryVoltage();
+void displayStringInHexChar(String data);
+
 void setup() {
   // *********** init Debug and LoRa baud rate ***********************************
   SerialDebug.begin(19200);      // the debug baud rate on Hardware Serial Atmega
@@ -54,43 +69,15 @@ void setup() {
 }
 
 void loop() {
-  static int lcdLoop = 0, battery = 0;
+  static int lcdLoop = 0, battery = 0, relay = 0;
+  static byte power = 0;
   static String lastLink;
   String result;
 
   /****** Power status measurement **************************************/
-  byte power = digitizePowerValue(readPowerInput());
+  power = digitizePowerValue(readPowerInput());
+  battery = getRealBatteryVoltage() * 1000.0;
   updateLedStatus(LED_PCB_PIN, power == 0);
-
-  /**************** Up Link Data ****************************************/
-  /*************** Send Message ? ***************/
-  unsigned long millisecondsElapsed = millis();
-  if (millisecondsElapsed  >= elapsedTimeSinceLastSending + ULDelayLoop) {
-
-    SerialDebug.println("*** TIME TO SEND DATA... ***");
-    sendPowerLineValuetoLoRa(power, lastLink);
-    //sendDatatoLoRa(String(power) + String(battery), lastLink);
-
-    /********* Down Link Get Serial Data *****************************/
-    SerialDebug.print("LAST LINK ");
-    SerialDebug.println(lastLink);
-
-    if (lastLink.indexOf("1") >= 0)
-    {
-      SerialDebug.println("Turn Relay ON");
-      digitalWrite(RELAY_EXT_PIN, HIGH);
-    }
-    else if (lastLink.indexOf("0") >= 0)
-    {
-      SerialDebug.println("Turn Relay OFF");
-      digitalWrite(RELAY_EXT_PIN, LOW);
-    }
-    else
-    {
-      SerialDebug.println("No command received...");
-    }
-    elapsedTimeSinceLastSending = millisecondsElapsed;
-  }
 
   if (lcdLoop % LCD_DISPLAY_MOD == 0)
   {
@@ -125,15 +112,26 @@ void loop() {
 
     /*    SerialDebug.println("Battery Level");
         sendATCommandToLoRa("ATT08\r\n", false, result);*/
-
-    battery = getRealBatteryVoltage() * 1000.0;
     displayOnLCDX(4, "BAT " + String(battery) + "mv");
 
     String status = ((power == 0) ? "OFF" : "ON");
-    displayOnLCDX(5, "POW " + status);
+    displayOnLCDXY(5, 0, "POW " + status);
     SerialDebug.println("POWER ");
     SerialDebug.println(status);
+  }
 
+  /**************** Up Link Data ****************************************/
+  /*************** Send Message ? ***************/
+  unsigned long millisecondsElapsed = millis();
+  if (millisecondsElapsed  >= elapsedTimeSinceLastSending + ULDelayLoop) {
+
+    SerialDebug.println("*** TIME TO SEND DATA... ***");
+    //    sendPowerLineValuetoLoRa(power, lastLink);
+    sendDatatoLoRa(String(power) + "-" + String(relay) + "-" + String(battery), lastLink);
+
+    /********* Down Link Get Serial Data *****************************/
+    SerialDebug.print("LAST LINK ");
+    SerialDebug.println("*" + lastLink + "*");
     if (lastLink.indexOf("OK") >= 0)
     {
       SerialDebug.println("=> UP OK");
@@ -145,27 +143,35 @@ void loop() {
       displayOnLCDXY(5, 8, "UP KO");
     }
 
-    if (lastLink.indexOf("1") >= 0) // Send 31
+    if (lastLink.indexOf(0xFFFFFFF1) >= 0) // Send F1
     {
+      relay = 1;
+      SerialDebug.println("Turn Relay ON");
+      digitalWrite(RELAY_EXT_PIN, HIGH);
       SerialDebug.println("=> DOWN ON");
       displayOnLCDX(6, "LAST DOWN ON");
     }
-    else if (lastLink.indexOf("0") >= 0) // Send 30
+    else if (lastLink.indexOf(0xFFFFFFF0) >= 0) // Send 30
     {
+      relay = 0;
+      SerialDebug.println("Turn Relay OFF");
+      digitalWrite(RELAY_EXT_PIN, LOW);
       SerialDebug.println("=> DOWN OFF");
       displayOnLCDX(6, "LAST DOWN OFF");
     }
     else
     {
+      SerialDebug.println("No command received...");
       SerialDebug.println("=> NO DOWN DATA");
       displayOnLCDX(6, "NO DOWN DATA");
     }
+    elapsedTimeSinceLastSending = millisecondsElapsed;
   }
 
   unsigned long wait = (elapsedTimeSinceLastSending - millisecondsElapsed + ULDelayLoop) / 1000;
   if (wait <= ULDelayLoop)
   {
-    SerialDebug.println("Link in " + String(wait) + "s");
+    //    SerialDebug.println("Link in " + String(wait) + "s");
     displayOnLCDXY(7, 0, "Link in " + String(wait) + "s   ");
   }
 
@@ -208,11 +214,12 @@ void initLoRaModule() {
   sendATCommandToLoRa("+++", false, result);
   SerialDebug.println("LoRa Serial rate 19200 ATM007=06");
   sendATCommandToLoRa("ATM007=06\r\n", false, result);
-  /*  SerialDebug.println("Debug Mode ON or OFF");
-    sendATCommandToLoRa("ATM17=0\r\n", false, result); // 1: DEBUG MODE ON, 0 ou 3: DEBUG MODE OFF*/
   SerialDebug.println("ATIM Module version & information");
   sendATCommandToLoRa("ATV\r\n", false, result);
-  /*  SerialDebug.println("Module Configuration");
+  SerialDebug.println("Debug Mode ON or OFF");
+  sendATCommandToLoRa("ATM17=1\r\n", false, result); // 3: DEBUG MODE ON, 1: DEBUG MODE OFF
+  /*
+    SerialDebug.println("Module Configuration");
     sendATCommandToLoRa("ATM000\r\n", false, result);
     SerialDebug.println("Low Power");
     sendATCommandToLoRa("ATM001\r\n", false, result);
@@ -224,11 +231,11 @@ void initLoRaModule() {
     sendATCommandToLoRa("ATO069\r\n", false, result);*/
   SerialDebug.println("Get DevEUI (LSB F) ATO070");
   sendATCommandToLoRa("ATO070\r\n", false, result);
-  /*SerialDebug.println("Get AppEUI (LSB F) ATO071");
-    sendATCommandToLoRa("ATO071\r\n", false, result);
-    SerialDebug.println("Get AppKey (LSB F) ATO072");
-    sendATCommandToLoRa("ATO072\r\n", false, result);
-      SerialDebug.println("Get NwkSKey (LSB F) ATO073");
+  SerialDebug.println("Get AppEUI (LSB F) ATO071");
+  sendATCommandToLoRa("ATO071\r\n", false, result);
+  SerialDebug.println("Get AppKey (LSB F) ATO072");
+  sendATCommandToLoRa("ATO072\r\n", false, result);
+  /*    SerialDebug.println("Get NwkSKey (LSB F) ATO073");
       sendATCommandToLoRa("ATO073\r\n", false, result);
       SerialDebug.println("Get AppSKey (LSB F) ATO074");
       sendATCommandToLoRa("ATO074\r\n", false, result);
@@ -248,7 +255,6 @@ void initLoRaModule() {
       sendATCommandToLoRa("ATO082\r\n", false, result);
       SerialDebug.println("Frame Size ATO084");
       sendATCommandToLoRa("ATO084\r\n", false, result);*/
-
   SerialDebug.println("NETWORK_JOINED");
   sendATCommandToLoRa("ATO201\r\n", false, result);
 
@@ -260,49 +266,31 @@ void initLoRaModule() {
   SerialDebug.println(" --> OTAA ");
 
   /***************** OTAA ****************************************/
-  if (result[7] != '3' || result[8] != 'F') { // Avoid Restarting if Already in Right Mode
-    SerialDebug.println("Set to OTAA mode");
-    sendATCommandToLoRa("ATO083=3F\r\n", false, result);
-
-    SerialDebug.println("Save new configuration");
-    sendATCommandToLoRa("ATOS", false, result);
-    delay(2 * LoRaSerialDelay);
-
-    SerialDebug.println("Restart the module");
-    sendATCommandToLoRa("ATR\r\n", false, result);
-    delay(2 * LoRaSerialDelay);
-  }
+  SerialDebug.println("Set to OTAA mode");
+  sendATCommandToLoRa("ATO083=3F\r\n", false, result);
 #else
   SerialDebug.println(" --> ABP ");
 
   /***************** ABP ****************************************/
-  if (result[7] != '3' || result[8] != 'E') { // Avoid Restarting if Already in Right Mode
-    SerialDebug.println("Set to ABP mode");
-    sendATCommandToLoRa("ATO083=3E\r\n", false, result);
+  SerialDebug.println("Set to ABP mode");
+  sendATCommandToLoRa("ATO083=3E\r\n", false, result);
 
-    SerialDebug.println("Save new configuration");
-    sendATCommandToLoRa("ATOS", false, result);
-    delay(2 * LoRaSerialDelay);
+  SerialDebug.println("Save new configuration");
+  sendATCommandToLoRa("ATOS", false, result);
+  delay(2 * LoRaSerialDelay);
 
-    SerialDebug.println("Restart the module");
-    sendATCommandToLoRa("ATR\r\n", false, result);
-    delay(2 * LoRaSerialDelay);
-  }
+  SerialDebug.println("Restart the module");
+  sendATCommandToLoRa("ATR\r\n", false, result);
+  delay(2 * LoRaSerialDelay);
 #endif
 
-  //  /***************** ATF ****************************************/
-  //  SerialLoRa.println("ATOS\r\n");
-  //  dummy = SerialLoRa.readString();
-  //  SerialDebug.println(" return to factory config ");
-  //  SerialDebug.println(dummy);
-  //  delay(500);
-  //
-  //  /***************** reboot ****************************************/
-  //  SerialLoRa.println("ATR\r\n");
-  //  dummy = SerialLoRa.readString();
-  //  SerialDebug.println(" reboot module ");
-  //  SerialDebug.println(dummy);
-  //  delay(500);
+  SerialDebug.println("Save new configuration");
+  sendATCommandToLoRa("ATOS", false, result);
+  delay(2 * LoRaSerialDelay);
+
+  SerialDebug.println("Restart the module");
+  sendATCommandToLoRa("ATR\r\n", false, result);
+  delay(2 * LoRaSerialDelay);
 
   /***********************Quit COMMAND MODE ********************/
   //SerialDebug.println("Quit command mode: ATQ");
@@ -311,34 +299,18 @@ void initLoRaModule() {
 
 void sendATCommandToLoRa(String upData, bool extraDelay, String &downData) {
   downData = "";
+  int maxIdx = extraDelay ? 5 : 1;
 
+  SerialLoRa.flush();
   SerialLoRa.print(upData);
-  unsigned long millisecondsDownLink = millis(); // Current millis()
-  while (!SerialLoRa.available())
-    if ((millis() - millisecondsDownLink) > ULAirTimeDelay) break;
 
-  if (SerialLoRa.available()) {
-    // Read the Down Link serial Data:
-    downData = SerialLoRa.readString();
-  }
-
-  if (extraDelay)
+  for (int idx = 0; idx < maxIdx; idx++)
   {
-    SerialDebug.println("Waiting for more Data");
     unsigned long millisecondsDownLink = millis(); // Current millis()
     while (!SerialLoRa.available())
       if ((millis() - millisecondsDownLink) > ULAirTimeDelay) break;
 
-    if (SerialLoRa.available()) {
-      SerialDebug.println("Add more Data :-)");
-
-      // Read the Down Link serial Data:
-      downData += SerialLoRa.readString();
-    }
-    /*      else
-          {
-            SerialDebug.println("No Extra Data");
-          }*/
+    downData += SerialLoRa.readString();
   }
 
   if (downData.length() > 0) {
@@ -388,7 +360,7 @@ void sendDatatoLoRa(String data, String &result) {
   }
 
   SerialDebug.print("Send Data: ");
-  SerialDebug.println(hexStr);
+  SerialDebug.println(data + " / " + hexStr);
   sendATCommandToLoRa("AT$SF=" + hexStr + "\r\n", true, result);
 }
 
@@ -401,16 +373,16 @@ void updateLedStatus(int led, boolean predicate) {
 }
 
 byte digitizePowerValue(int powerValue) {
-  SerialDebug.print("Power Value: ");
-  SerialDebug.println(powerValue);
+  /*  SerialDebug.print("Power Value: ");
+    SerialDebug.println(powerValue);*/
   return powerValue > 512 ? 1 : 0;
 }
 
 int readPowerInput() {
   int sum = 0, i;
   int battery = getRealBatteryVoltage() * 1000.0; // Measure battery here!
-  SerialDebug.print("Battery: ");
-  SerialDebug.println(battery);
+  /*  SerialDebug.print("Battery: ");
+    SerialDebug.println(battery);*/
 
   for (i = 0; i < 3; i++)
   {
