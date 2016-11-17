@@ -216,19 +216,18 @@ void initLoRaModule() {
   sendATCommandToLoRa("ATM007=06\r\n", false, result);
   SerialDebug.println("ATIM Module version & information");
   sendATCommandToLoRa("ATV\r\n", false, result);
-  SerialDebug.println("Debug Mode ON or OFF");
-  sendATCommandToLoRa("ATM17=1\r\n", false, result); // 3: DEBUG MODE ON, 1: DEBUG MODE OFF
-  /*
-    SerialDebug.println("Module Configuration");
-    sendATCommandToLoRa("ATM000\r\n", false, result);
-    SerialDebug.println("Low Power");
-    sendATCommandToLoRa("ATM001\r\n", false, result);
-    SerialDebug.println("LED Mode");
-    sendATCommandToLoRa("ATM002\r\n", false, result);
-    SerialDebug.println("Battery Level");
-    sendATCommandToLoRa("ATT08\r\n", false, result);
-    SerialDebug.println("Get DevAddr (LSB F) ATO069");
-    sendATCommandToLoRa("ATO069\r\n", false, result);*/
+  /*  SerialDebug.println("Debug Mode ON or OFF");
+      sendATCommandToLoRa("ATM17=1\r\n", false, result); // 3: DEBUG MODE ON, 1: DEBUG MODE OFF
+      SerialDebug.println("Module Configuration");
+      sendATCommandToLoRa("ATM000\r\n", false, result);
+      SerialDebug.println("Low Power");
+      sendATCommandToLoRa("ATM001\r\n", false, result);
+      SerialDebug.println("LED Mode");
+      sendATCommandToLoRa("ATM002\r\n", false, result);
+      SerialDebug.println("Battery Level");
+      sendATCommandToLoRa("ATT08\r\n", false, result);
+      SerialDebug.println("Get DevAddr (LSB F) ATO069");
+      sendATCommandToLoRa("ATO069\r\n", false, result);*/
   SerialDebug.println("Get DevEUI (LSB F) ATO070");
   sendATCommandToLoRa("ATO070\r\n", false, result);
   SerialDebug.println("Get AppEUI (LSB F) ATO071");
@@ -263,33 +262,43 @@ void initLoRaModule() {
   sendATCommandToLoRa("ATO083\r\n", false, result);
 
 #ifdef MODE_OTAA
-  SerialDebug.println(" --> OTAA ");
+  if (result[7] != '3' || result[8] != 'F') { // Avoid Restarting if Already in Right Mode
+    SerialDebug.println(" --> OTAA ");
 
-  /***************** OTAA ****************************************/
-  SerialDebug.println("Set to OTAA mode");
-  sendATCommandToLoRa("ATO083=3F\r\n", false, result);
+    /***************** OTAA ****************************************/
+    SerialDebug.println("Set to OTAA mode");
+    sendATCommandToLoRa("ATO083=3F\r\n", false, result);
+    SerialDebug.println("Save new configuration");
+    sendATCommandToLoRa("ATOS", false, result);
+    delay(2 * LoRaSerialDelay);
+    SerialDebug.println("Restart the module");
+    sendATCommandToLoRa("ATR\r\n", false, result);
+    delay(2 * LoRaSerialDelay);
+  }
 #else
-  SerialDebug.println(" --> ABP ");
+  if (result[7] != '3' || result[8] != 'E') { // Avoid Restarting if Already in Right Mode
+    SerialDebug.println(" --> ABP ");
 
-  /***************** ABP ****************************************/
-  SerialDebug.println("Set to ABP mode");
-  sendATCommandToLoRa("ATO083=3E\r\n", false, result);
-
-  SerialDebug.println("Save new configuration");
-  sendATCommandToLoRa("ATOS", false, result);
-  delay(2 * LoRaSerialDelay);
-
-  SerialDebug.println("Restart the module");
-  sendATCommandToLoRa("ATR\r\n", false, result);
-  delay(2 * LoRaSerialDelay);
+    /***************** ABP ****************************************/
+    SerialDebug.println("Set to ABP mode");
+    sendATCommandToLoRa("ATO083=3E\r\n", false, result);
+    SerialDebug.println("Save new configuration");
+    sendATCommandToLoRa("ATOS", false, result);
+    delay(2 * LoRaSerialDelay);
+    SerialDebug.println("Restart the module");
+    sendATCommandToLoRa("ATR\r\n", false, result);
+    delay(2 * LoRaSerialDelay);
+  }
 #endif
+  /*  SerialDebug.println("Save new configuration");
+    sendATCommandToLoRa("ATOS", false, result);
+    delay(2 * LoRaSerialDelay);
+    SerialDebug.println("Restart the module");
+    sendATCommandToLoRa("ATR\r\n", false, result);
+    delay(2 * LoRaSerialDelay);*/
 
-  SerialDebug.println("Save new configuration");
-  sendATCommandToLoRa("ATOS", false, result);
-  delay(2 * LoRaSerialDelay);
-
-  SerialDebug.println("Restart the module");
-  sendATCommandToLoRa("ATR\r\n", false, result);
+  SerialDebug.println("Read configuration from EEPROM");
+  sendATCommandToLoRa("ATOR", false, result);
   delay(2 * LoRaSerialDelay);
 
   /***********************Quit COMMAND MODE ********************/
@@ -299,7 +308,7 @@ void initLoRaModule() {
 
 void sendATCommandToLoRa(String upData, bool extraDelay, String &downData) {
   downData = "";
-  int maxIdx = extraDelay ? 5 : 1;
+  int maxIdx = extraDelay ? 3 : 1;
 
   SerialLoRa.flush();
   SerialLoRa.print(upData);
