@@ -127,7 +127,7 @@ void loop() {
 
     SerialDebug.println("*** TIME TO SEND DATA... ***");
     //    sendPowerLineValuetoLoRa(power, lastLink);
-    sendDatatoLoRa(String(power) + "-" + String(relay) + "-" + String(battery), lastLink);
+    sendDatatoLoRa(String(power) + String(relay) + String(battery), lastLink);
 
     /********* Down Link Get Serial Data *****************************/
     SerialDebug.print("LAST LINK ");
@@ -151,7 +151,7 @@ void loop() {
       SerialDebug.println("=> DOWN ON");
       displayOnLCDX(6, "LAST DOWN ON");
     }
-    else if (lastLink.indexOf(0xFFFFFFF0) >= 0) // Send 30
+    else if (lastLink.indexOf(0xFFFFFFF0) >= 0) // Send F0
     {
       relay = 0;
       SerialDebug.println("Turn Relay OFF");
@@ -216,18 +216,16 @@ void initLoRaModule() {
   sendATCommandToLoRa("ATM007=06\r\n", false, result);
   SerialDebug.println("ATIM Module version & information");
   sendATCommandToLoRa("ATV\r\n", false, result);
-  /*  SerialDebug.println("Debug Mode ON or OFF");
-      sendATCommandToLoRa("ATM17=1\r\n", false, result); // 3: DEBUG MODE ON, 1: DEBUG MODE OFF
-      SerialDebug.println("Module Configuration");
-      sendATCommandToLoRa("ATM000\r\n", false, result);
-      SerialDebug.println("Low Power");
-      sendATCommandToLoRa("ATM001\r\n", false, result);
-      SerialDebug.println("LED Mode");
-      sendATCommandToLoRa("ATM002\r\n", false, result);
-      SerialDebug.println("Battery Level");
-      sendATCommandToLoRa("ATT08\r\n", false, result);
-      SerialDebug.println("Get DevAddr (LSB F) ATO069");
-      sendATCommandToLoRa("ATO069\r\n", false, result);*/
+  /*      SerialDebug.println("Module Configuration");
+        sendATCommandToLoRa("ATM000\r\n", false, result);
+        SerialDebug.println("Low Power");
+        sendATCommandToLoRa("ATM001\r\n", false, result);
+        SerialDebug.println("LED Mode");
+        sendATCommandToLoRa("ATM002\r\n", false, result);
+        SerialDebug.println("Battery Level");
+        sendATCommandToLoRa("ATT08\r\n", false, result);
+        SerialDebug.println("Get DevAddr (LSB F) ATO069");
+        sendATCommandToLoRa("ATO069\r\n", false, result);*/
   SerialDebug.println("Get DevEUI (LSB F) ATO070");
   sendATCommandToLoRa("ATO070\r\n", false, result);
   SerialDebug.println("Get AppEUI (LSB F) ATO071");
@@ -270,10 +268,10 @@ void initLoRaModule() {
     sendATCommandToLoRa("ATO083=3F\r\n", false, result);
     SerialDebug.println("Save new configuration");
     sendATCommandToLoRa("ATOS", false, result);
-    delay(2 * LoRaSerialDelay);
+    delay(3 * LoRaSerialDelay);
     SerialDebug.println("Restart the module");
     sendATCommandToLoRa("ATR\r\n", false, result);
-    delay(2 * LoRaSerialDelay);
+    delay(3 * LoRaSerialDelay);
   }
 #else
   if (result[7] != '3' || result[8] != 'E') { // Avoid Restarting if Already in Right Mode
@@ -284,22 +282,25 @@ void initLoRaModule() {
     sendATCommandToLoRa("ATO083=3E\r\n", false, result);
     SerialDebug.println("Save new configuration");
     sendATCommandToLoRa("ATOS", false, result);
-    delay(2 * LoRaSerialDelay);
+    delay(3 * LoRaSerialDelay);
     SerialDebug.println("Restart the module");
     sendATCommandToLoRa("ATR\r\n", false, result);
-    delay(2 * LoRaSerialDelay);
+    delay(3 * LoRaSerialDelay);
   }
 #endif
   /*  SerialDebug.println("Save new configuration");
     sendATCommandToLoRa("ATOS", false, result);
-    delay(2 * LoRaSerialDelay);
+    delay(3 * LoRaSerialDelay);
     SerialDebug.println("Restart the module");
     sendATCommandToLoRa("ATR\r\n", false, result);
-    delay(2 * LoRaSerialDelay);*/
+    delay(3 * LoRaSerialDelay);*/
 
   SerialDebug.println("Read configuration from EEPROM");
   sendATCommandToLoRa("ATOR", false, result);
-  delay(2 * LoRaSerialDelay);
+  delay(3 * LoRaSerialDelay);
+
+  SerialDebug.println("Debug Mode ON or OFF");
+  sendATCommandToLoRa("ATM17=1\r\n", false, result); // 3: DEBUG MODE ON, 1: DEBUG MODE OFF
 
   /***********************Quit COMMAND MODE ********************/
   //SerialDebug.println("Quit command mode: ATQ");
