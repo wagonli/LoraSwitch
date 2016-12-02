@@ -11,7 +11,7 @@
         <module>ls-application</module>
         <module>ls-common</module>
     </modules>
-    <packaging>pom</packaging>
+    <packaging>war</packaging>
 
     <name>loraswitch</name>
     <description>Demo project for Spring Boot</description>
@@ -87,6 +87,24 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>openshift</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <artifactId>maven-war-plugin</artifactId>
+                        <version>${version.war.plugin}</version>
+                        <configuration>
+                            <outputDirectory>deployments</outputDirectory>
+                            <warName>ROOT</warName>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 
 </project>

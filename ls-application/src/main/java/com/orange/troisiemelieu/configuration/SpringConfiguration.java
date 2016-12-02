@@ -1,5 +1,6 @@
 package com.orange.troisiemelieu.configuration;
 
+import static java.lang.String.format;
 import static com.orange.troisiemelieu.tool.Exceptions.uncheck;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,11 +33,12 @@ public class SpringConfiguration {
     }
 
     @Bean
-    public MessageProducer inbound(MqttPahoClientFactory clientFactory) {
+    public MessageProducer inbound(MqttPahoClientFactory clientFactory,
+                                   @Value("${device.uid}") String deviceUid) {
         try {
             MqttPahoMessageDrivenChannelAdapter adapter =
                     new MqttPahoMessageDrivenChannelAdapter("roberto", clientFactory,
-                                                            "router/~event/v1/data/new/urn/lora/70B3D59BA0000384/uplink");
+                                                            format("router/~event/v1/data/new/urn/lora/%s/uplink", deviceUid));
             adapter.setCompletionTimeout(5000);
             adapter.setConverter(new DefaultPahoMessageConverter());
             adapter.setQos(1);
