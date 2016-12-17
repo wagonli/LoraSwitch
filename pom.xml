@@ -11,7 +11,7 @@
         <module>ls-application</module>
         <module>ls-common</module>
     </modules>
-    <packaging>war</packaging>
+    <packaging>pom</packaging>
 
     <name>loraswitch</name>
     <description>Demo project for Spring Boot</description>

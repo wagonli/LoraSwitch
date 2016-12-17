@@ -1,0 +1,8 @@
+{
+    "lom.uri": "https://lpwa.liveobjects.orange-business.com/",
+    "lom.mqtt.uri": "tcp://liveobjects.orange-business.com:1883",
+    "lom.api.key": "b8a087b4973c4c8f8db9a248eec7f68f",
+    "device.uid.other": "70B3D59BA0000384",
+    "device.uid": "70B3D59BA00004C5",
+    "server.contextPath": "/"
+}

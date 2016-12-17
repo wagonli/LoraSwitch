@@ -1,0 +1,12 @@
+{
+  "name": "loraswitchapi",
+  "version": "0.0.1",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "latest",
+    "pkginfo": "latest",
+    "unirest": "latest"
+  }
+}
