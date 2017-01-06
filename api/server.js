@@ -26,22 +26,16 @@ router.put("/switch/:switchValue", function(req,res) {
          .end(function (response) {
            res.send(response.body);
          });
-  // format("%s/api/v0/vendors/lora/devices/%s/commands", lomUri, deviceUid);
-  //   }
+});
 
-    // @Override
-    // public String switchPower(boolean switchValue) throws IOException {
-    //     log.info("Received switch request with value {}", switchValue);
-    //     RequestBody body = RequestBody.create(JSON, format("{\"data\": \"%s\", \"port\": 5, \"confirmed\": true}", switchValue ? "F1" : "F0"));
-    //     Request request = new Request.Builder().url(commandUri)
-    //                                            .header("X-API-KEY", apiKey)
-    //                                            .header("Accept", "application/json")
-    //                                            .post(body)
-    //                                            .build();
-    //     okhttp3.Response response = client.newCall(request).execute();
-    //     return response.body().string();
-    // }
-})
+router.get("/power/status", function(req, res) {
+  var serviceUri = util.format("%sapi/v0/data/streams/urn:lora:%s!uplink?limit=1", properties["lom.uri"], properties["device.uid"]);
+  unirest.get(serviceUri)
+         .headers({'X-API-KEY': properties['lom.api.key'], 'Accept': 'application/json'})
+         .end(function (response) {
+           res.send(Uint8Array.from(response.body[0].value.payload));
+         });
+});
 
 app.use("/",router);
 
@@ -49,7 +43,7 @@ app.use("*",function(req,res){
   res.sendStatus(404);
 });
 
-app.listen(8080,function(){
-  console.log("Live at Port 8080");
+app.listen(5555,function(){
+  console.log("Live at Port 5555");
   console.log(properties["lom.uri"]);
 });
