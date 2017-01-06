@@ -3,6 +3,7 @@ var pkginfo = require('pkginfo')(module, 'version');
 var properties = require('./properties.json');
 var unirest = require('unirest');
 var util = require('util');
+var cors = require('cors');
 
 var app = express();
 var router = express.Router();
@@ -11,6 +12,8 @@ var path = __dirname + '/views/';
 var convert = function(numberInHex) {
   return parseInt(numberInHex, 16).toString(10);
 }
+
+app.use(cors());
 
 router.use(function (req,res,next) {
   console.log("/" + req.method);

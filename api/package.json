@@ -7,6 +7,7 @@
   "dependencies": {
     "express": "latest",
     "pkginfo": "latest",
-    "unirest": "latest"
+    "unirest": "latest",
+    "cors": "latest"
   }
 }
