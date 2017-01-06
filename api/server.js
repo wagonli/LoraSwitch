@@ -45,7 +45,7 @@ router.get("/power/status", function(req, res) {
            convert(p.slice(6,8)), 
            convert(p.slice(8,10)), 
            convert(p.slice(10,12)));
-           res.contentType("application/json").send(response);
+           res.json(response);
          });
 });
 
