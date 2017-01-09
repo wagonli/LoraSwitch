@@ -9,5 +9,22 @@
     "pkginfo": "latest",
     "unirest": "latest",
     "cors": "latest"
-  }
+  },
+  "description": "back end for the lora switch",
+  "main": "server.js",
+  "devDependencies": {},
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wagonli/LoraSwitch.git"
+  },
+  "keywords": [
+    "lora",
+    "arduino"
+  ],
+  "author": "Patrick Sachet & Franck Weens",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/wagonli/LoraSwitch/issues"
+  },
+  "homepage": "https://github.com/wagonli/LoraSwitch#readme"
 }
