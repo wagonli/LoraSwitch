@@ -4,6 +4,7 @@ var properties = require('./properties.json');
 var unirest = require('unirest');
 var util = require('util');
 var cors = require('cors');
+var moment = require('moment');
 
 var app = express();
 var router = express.Router();
@@ -50,7 +51,7 @@ router.get("/power/status", function(req, res) {
            convert(p.slice(6,8)), 
            convert(p.slice(8,10)), 
            convert(p.slice(10,12)));
-           response.timestamp = body.timestamp;
+           response.timestamp = moment(body.timestamp).unix();
            response.signalLevel = value.signalLevel;
            res.json(response);
          });
