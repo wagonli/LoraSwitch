@@ -40,7 +40,9 @@ router.get("/power/status", function(req, res) {
   unirest.get(serviceUri)
          .headers({'X-API-KEY': properties['lom.api.key'], 'Accept': 'application/json'})
          .end(function (response) {
-           var p = response.body[0].value.payload;
+           var body = response.body[0];
+           var value = body.value;
+           var p = value.payload;
            var response = {};
            response.power = String.fromCharCode(convert(p.slice(0,2)));
            response.relay = String.fromCharCode(convert(p.slice(2,4)));
@@ -48,6 +50,8 @@ router.get("/power/status", function(req, res) {
            convert(p.slice(6,8)), 
            convert(p.slice(8,10)), 
            convert(p.slice(10,12)));
+           response.timestamp = body.timestamp;
+           response.signalLevel = value.signalLevel;
            res.json(response);
          });
 });
