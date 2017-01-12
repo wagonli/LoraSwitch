@@ -1,6 +1,6 @@
 var express = require("express");
 require("pkginfo")(module, "version");
-var properties = require("./properties.json");
+var properties = require("../config/properties.json");
 var unirest = require("unirest");
 var util = require("util");
 var cors = require("cors");
@@ -8,6 +8,7 @@ var moment = require("moment");
 var app = express();
 var router = express.Router();
 var logger = require("winston");
+var switchService = require("./service/switchService.js")
 
 const SERVER_PORT = 5555;
 
@@ -27,14 +28,9 @@ router.get("/version",function(req,res){
 });
 
 router.put("/switch/:switchValue", function(req,res) {
-    var serviceUri = util.format("%sapi/v0/vendors/lora/devices/%s/commands", properties["lom.uri"], properties["device.uid"]);
-    unirest.post(serviceUri)
-         .headers({"X-API-KEY": properties["lom.api.key"], "Accept": "application/json"})
-         .type("json")
-         .send({"data": (req.params["switchValue"] == 1 ? "F1" : "F0"), "port": 5, "confirmed": true})
-         .end(function (response) {
-             res.send(response.body);
-         });
+    switchService.switch(properties, req.params["switchValue"], function(response) {
+        res.send(response.body);
+    });
 });
 
 router.get("/power/status", function(req, res) {

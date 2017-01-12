@@ -11,7 +11,7 @@ var gulp = require('gulp'),
  */
 gulp.task('server', function() {
   if (node) node.kill()
-  node = spawn('node', ['server.js'], {stdio: 'inherit'})
+  node = spawn('node', ['srv/server.js'], {stdio: 'inherit'})
   node.on('close', function (code) {
     if (code === 8) {
       gulp.log('Error detected, waiting for changes...');
@@ -24,7 +24,7 @@ gulp.task('server', function() {
  * description: start the development environment
  */
 gulp.task('default', ['server'], function() {
-  gulp.watch(['./server.js', './**/*.js'], ['server'])
+  gulp.watch(['./srv/server.js', './**/*.js'], ['server'])
   // Need to watch for sass changes too? Just add another watch call!
   // no more messing around with grunt-concurrent or the like. Gulp is
   // async by default.
