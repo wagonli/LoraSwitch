@@ -65,6 +65,6 @@ app.use("*",function(req,res){
 });
 
 app.listen(SERVER_PORT,function(){
-    logger.log("info" , "Live at Port %s", SERVER_PORT);
+    logger.log("info" , "Hello, i'm live at Port %s", SERVER_PORT);
     logger.log("info", properties["lom.uri"]);
 });

@@ -15,7 +15,9 @@
   "description": "back end for the lora switch",
   "main": "server.js",
   "devDependencies": {
-    "eslint": "^3.13.1"
+    "eslint": "^3.13.1",
+    "gulp": "^3.9.1",
+    "gulp-connect": "^5.0.0"
   },
   "repository": {
     "type": "git",
