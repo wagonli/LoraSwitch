@@ -18,7 +18,7 @@ var convert = function(numberInHex) {
 app.use(cors());
 
 router.use(function (req,res,next) {
-    logger.log("info", "/" + req.method);
+    logger.log("info", "%s;%s;%s;%s", req.method, req.url, req.ip, req.rawHeaders);
     next();
 });
 
