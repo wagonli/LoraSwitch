@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>LoRaSwitch by P. Sachet & F. Weens</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.css" />
+	<link rel="apple-touch-icon" href="apple-touch-icon-iphone.png" />
+	<script src="http://code.jquery.com/jquery-2.1.4.min.js"></script>
+	<script src="http://code.jquery.com/mobile/1.4.5/jquery.mobile-1.4.5.min.js"></script>
+	<script>
+	var requestNumber=0;
+	$(document).ajaxStart(function() { if(requestNumber == 0) { $.mobile.loading("show", { textVisible: true }); disableControls(); }; requestNumber++; });
+	$(document).ajaxStop(function() { requestNumber--; if(requestNumber == 0) { $.mobile.loading('hide'); enableControls(); } });
+	$(document).ready(function() { runAndSetInterval(refreshUI,150000); $("#flip").change(updateSwitch); });
+
+	function refreshUI() { getSwitch();	}
+
+	function disableControls() {
+			$("#flip").flipswitch('disable');
+	}
+
+	function enableControls()	{
+		$("#flip").flipswitch('enable');
+	}
+
+	function updateSwitch()	{
+//		alert("updateSwitch");
+		var flipId = this.id == "flip" ? "FLIP" : "UNKNOWN";
+		var flipValue = this.value == "on" ? "1" : "0";
+		var url="http://gibbonland.fr:15555/switch/" + flipValue;
+		ajaxRequest(url, "PUT", onSwitchUpdateSuccess, "Switch Update ERROR.");
+	}
+
+	function getSwitch() {
+		ajaxRequest("http://gibbonland.fr:15555/power/status", "GET", onSwitchGetSuccess, "Switch Get Status ERROR.");
+	}
+
+	function ajaxRequest(requestedUrl, requestType, successFunc, message) {
+		$.ajax({
+				url: requestedUrl,
+				type: requestType,
+				timeout: 30000,
+				dataType: "json",
+				cache: false,
+				error: function(error) { onError(message,error); },
+				success: function(data) { successFunc(data); }
+			});
+	}
+
+	function formatDate(dateStr) {
+		var date = new Date(dateStr*1000);
+		var sMonth = padValue(date.getMonth() + 1);
+		var sDay = padValue(date.getDate());
+		var sYear = date.getFullYear();
+		var sHour = date.getHours();
+		var sMinute = padValue(date.getMinutes());
+		var sAMPM = "AM";
+
+		var iHourCheck = parseInt(sHour);
+		if (iHourCheck > 12) {
+			sAMPM = "PM";
+			sHour = iHourCheck - 12;
+		}
+		else if (iHourCheck === 0) {
+			sHour = "12";
+		}
+
+		sHour = padValue(sHour);
+
+    return sMonth + "-" + sDay + "-" + sYear + " " + sHour + ":" + sMinute + " " + sAMPM;
+	}
+
+	function padValue(value) {
+		return (value < 10) ? "0" + value : value;
+	}
+
+	function onSwitchUpdateSuccess(data) {
+		disableControls();
+//		alert("onSwitchUpdateSuccess");
+	}
+
+	function onSwitchGetSuccess(data) {
+		alert("onSwitchGetSuccess");
+		enableControls();
+		if(data.power == "1") {
+			$("#upIcon").attr('src',"./ON.jpg");
+			$("#upStatusLastUpdateHeader").html("220V ON");
+		} else {
+			$("#upIcon").attr('src',"./OFF.jpg");
+			$("#upStatusLastUpdateHeader").html("220V OFF");
+		}
+		$("#upStatusLastUpdateContent").html("Last update "+formatDate(data.timestamp));
+
+		var battery="Battery ";
+		if(data.battery >= 4000) {
+			battery+="<span class=\"greenText\">GOOD</span>";
+		}
+		else {
+			battery+="<span class=\"redText\">BAD</span>";
+		}
+		$("#upStatusBatteryHeader").html(battery);
+		$("#upStatusBatteryContent").html("Level "+data.battery+" mV");
+
+		$("#upStatusBatteryHeader").html(battery);
+
+		$("#upStatusSignalHeader").html("Network signal");
+		$("#upStatusLastSignalContent").html(data.signalLevel+"/5");
+
+		var status=data.relay == "1" ? "on" : "off";
+		$("#flip").off("change").val(status).flipswitch('refresh');
+		$("#flip").change(updateSwitch);
+		$("#switchStatus").html(data.MESSAGE);
+		$("#switchStatus").show("slow"); // setTimeout(function(){ $("#switchStatus").hide("slow"); }, 300000);
+	}
+
+	function onError(message, error) { displayStatus(); $('#content').html(message+" "+error.status+"/"+error.responseText+"/ Please try again later!"); }
+
+	function displayStatus() { $("#downStatus").show("slow"); setTimeout(hideStatus, 30000); }
+
+	function hideStatus() { $("#downStatus").hide("slow"); }
+
+	function runAndSetInterval(fn, t) { fn(); return(setInterval(fn, t)); }
+</script>
+</head>
+<style>
+.ui-header .ui-title { margin-left:10%; margin-right:10%; }
+.ui-footer .ui-title { margin-left:10%; margin-right:10%; }
+.ui-header .ui-title { margin-left:10%; margin-right:10%; }
+.ui-field-contain { margin:0px; padding:2px; }
+.ui-hide-label.ui-br, .no-field-separator { border-bottom-width: 0; }
+.slider input { display: none; }
+.redText { color: red; font-weight: bold; }
+.greenText { color: green; font-weight: bold; }
+</style>
+<body>
+<div data-role="page">
+	<div data-role="header"><h1><div>LoRaSwitch by P. Sachet & F. Weens</div></h1></div><!-- /header -->
+
+	<div role="main" class="ui-content">
+		<div data-role="header">
+			<h1 style="text-align:left; margin-left:2%;">UPLINK</h1>
+		</div>
+		<div id="upStatus" class="ui-body">
+			<img style="height:32px; margin:1%;" class="ui-btn-left" id="upIcon"/>
+			<table id="upStatusData" class="ui-body" style="margin-left:3%;">
+				<tr><th style="padding-left:1%;width:5%;text-align:left;" id="upStatusLastUpdateHeader"/><td style="padding-left:1%;width:30%;" id="upStatusLastUpdateContent"></td></tr>
+				<tr><th style="padding-left:1%;width:5%;text-align:left;" id="upStatusBatteryHeader"/><td style="padding-left:1%;width:15%;" id="upStatusBatteryContent"></td></tr>
+				<tr><th style="padding-left:1%;width:5%;text-align:left;" id="upStatusSignalHeader"/><td style="padding-left:1%;width:15%;" id="upStatusLastSignalContent"></td></tr>
+			</table>
+		</div>
+
+		<div data-role="header">
+			<h1 style="text-align:left; margin-left:2%;">DOWNLINK</h1>
+		</div>
+		<form class="ui-body">
+			<div class="ui-field-contain no-field-separator">
+			<label for="flip" style="width:100%">Switch</label>
+			<select name="flip" id="flip" data-role="flipswitch"><option value="off">OFF</option><option value="on">ON</option></select>
+			</div>
+		</form>
+		<div id="switchStatus" class="ui-body no-field-separator"></div>
+
+		<div id="downStatus" style="display: none;">
+			<h3 class="ui-bar ui-bar-a">Status</h3>
+			<div id="content" class="ui-body"></div>
+		</div>
+	</div>
+
+	<div data-role="footer">
+		<h4>2017 - LoRaSwitch Team + 3ème Lieu</h4>
+	</div><!-- /footer -->
+</div><!-- /page -->
+</body>
+</html>
